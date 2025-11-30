@@ -203,12 +203,3 @@ Possible extensions:
 Agarap, A. F. (2018). _On Breast Cancer Detection: An Application of Machine Learning Algorithms on the Wisconsin Diagnostic Dataset_. ICMLSC.
 
 ---
-
-## 👨‍💻 Author
-
-**Ahmed Trabelsi**
-Machine Learning & Software Engineering Student
-
----
-
-If you need a GitHub‑ready version with badges, sections, or a logo, I can generate it too !
