@@ -9,6 +9,7 @@ from tensorflow.keras.applications.xception import preprocess_input as xception_
 from tensorflow.keras.applications.efficientnet import preprocess_input as efficientnet_preprocess
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.keras.models import Model
+from tensorflow.keras.models import load_model
 import tensorflow as tf
 from datetime import datetime
 from io import BytesIO
@@ -18,6 +19,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
+from tensorflow.keras.applications.efficientnet_v2 import preprocess_input as efficientnet_v2_preprocess
 
 # ============================================================
 # CONFIGURATION
@@ -601,30 +603,35 @@ elif page == "Analyse d'Images Médicales":
         "⚠️ **Outil éducatif uniquement** • Ne remplace PAS un diagnostic médical • Consultez un spécialiste.")
 
     cancer_type_selected = st.selectbox("Type d'image :", [
+        "Colon (Histopathologie)",
         "Poumon (CT scan)",
         "Sein (Mammographie ou échographie)",
         "Peau (Photo dermatologique)"
     ])
 
     model_files = {
+        "Colon (Histopathologie)": "colon_cancer_model.keras",
         "Poumon (CT scan)": "best_model.hdf5",
         "Sein (Mammographie ou échographie)": "breast_best_head.h5",
         "Peau (Photo dermatologique)": "skin_cancer_model.h5"
     }
 
     classes_dict = {
+        "Colon (Histopathologie)": ["Cancer (Adénocarcinome)", "Normal"],
         "Poumon (CT scan)": ["Normal (Pas de cancer)", "Adénocarcinome", "Carcinome à grandes cellules", "Carcinome épidermoïde"],
         "Sein (Mammographie ou échographie)": ["Bénin", "Malin"],
         "Peau (Photo dermatologique)": ["Bénin", "Malin"]
     }
 
     input_sizes = {
+        "Colon (Histopathologie)": (300, 300),
         "Poumon (CT scan)": (299, 299),
         "Sein (Mammographie ou échographie)": (224, 224),
         "Peau (Photo dermatologique)": (224, 224)
     }
 
     preprocess_modes = {
+        "Colon (Histopathologie)": "efficientnet_v2",
         "Poumon (CT scan)": "xception",
         "Sein (Mammographie ou échographie)": "efficientnet",
         "Peau (Photo dermatologique)": "efficientnet"
@@ -635,6 +642,16 @@ elif page == "Analyse d'Images Médicales":
         model_path = model_files[cancer_type]
         input_shape = (*input_sizes[cancer_type], 3)
 
+        if "Colon" in cancer_type:
+            try:
+                # On charge le modèle complet directement (pas besoin de reconstruire l'architecture)
+                model = load_model(model_path)
+                st.success(f"Modèle {cancer_type} chargé avec succès.")
+                return model, preprocess_modes[cancer_type]
+            except Exception as e:
+                st.error(f"Erreur chargement modèle Colon: {e}")
+                return None, None
+            
         if "Poumon" in cancer_type:
             base = Xception(weights='imagenet',
                             include_top=False, input_shape=input_shape)
@@ -699,12 +716,25 @@ elif page == "Analyse d'Images Médicales":
             img_array = xception_preprocess(img_array)
         elif preprocess_mode == "efficientnet":
             img_array = efficientnet_preprocess(img_array)
+        elif preprocess_mode == "efficientnet_v2": 
+            img_array = efficientnet_v2_preprocess(img_array)
         else:
             img_array /= 255.0
 
         if st.button("🔍 Analyser l'image", type="primary"):
             with st.spinner("Prédiction en cours..."):
-                pred = image_model.predict(img_array)[0]
+                raw_pred = image_model.predict(img_array)[0]
+                pred = raw_pred
+                if "Colon" in cancer_type_selected:
+                    # Selon predict_colon.py: sortie = proba classe 1 (Normal)
+                    # Si shape est (1,), raw_pred[0] est la probabilité.
+                    prob_normal = float(raw_pred[0]) if hasattr(raw_pred, '__len__') and len(raw_pred) == 1 else float(raw_pred)
+                    prob_cancer = 1.0 - prob_normal
+                    
+                    # On reconstruit un tableau [Proba Cancer, Proba Normal] pour l'affichage
+                    pred = np.array([prob_cancer, prob_normal]) 
+                else:
+                    pred = raw_pred
                 confidence = np.max(pred) * 100
                 idx = np.argmax(pred)
                 result = classes[idx]
