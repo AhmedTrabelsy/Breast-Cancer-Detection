@@ -680,8 +680,7 @@ elif page == "Analyse d'Images Médicales":
 
     if uploaded_file:
         img_original = PILImage.open(uploaded_file).convert("RGB")
-        st.image(img_original, caption="Image originale",
-                 use_column_width=True)
+        st.image(img_original, caption="Image originale")
 
         processed_img = img_original
         if "Peau" in cancer_type_selected:
