@@ -608,7 +608,7 @@ elif page == "Analyse d'Images Médicales":
 
     model_files = {
         "Poumon (CT scan)": "best_model.hdf5",
-        "Sein (Mammographie ou échographie)": "breast_cancer_model.h5",
+        "Sein (Mammographie ou échographie)": "breast_best_head.h5",
         "Peau (Photo dermatologique)": "skin_cancer_model.h5"
     }
 
