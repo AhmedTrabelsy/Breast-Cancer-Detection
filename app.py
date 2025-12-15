@@ -647,12 +647,9 @@ elif page == "Analyse d'Images Médicales":
             model = Model(inputs=base.input, outputs=outputs)
             for layer in base.layers:
                 layer.trainable = False
-            try:
-                model.load_weights(model_path)
-                st.success("Modèle pour poumon chargé avec succès.")
-            except Exception as e:
-                st.warning(
-                    f"Impossible de charger les poids : {e}. Utilisation du modèle de base.")
+            model.load_weights(model_path)
+            st.success("Modèle pour poumon chargé avec succès.")
+
             return model, preprocess_modes[cancer_type]
         else:
             base = EfficientNetB0(weights='imagenet',
@@ -662,13 +659,9 @@ elif page == "Analyse d'Images Médicales":
             outputs = Dense(
                 len(classes_dict[cancer_type]), activation='softmax')(x)
             model = Model(inputs=base.input, outputs=outputs)
-            try:
-                model.load_weights(model_path, by_name=True,
-                                   skip_mismatch=True)
-                st.success(f"Modèle chargé avec succès.")
-            except Exception as e:
-                st.warning(
-                    f"Impossible de charger les poids : {e}. Utilisation du modèle de base.")
+            model.load_weights(model_path, by_name=True,
+                                skip_mismatch=True)
+            st.success(f"Modèle chargé avec succès.")
             return model, preprocess_modes[cancer_type]
 
     image_model, preprocess_mode = load_image_model(cancer_type_selected)
