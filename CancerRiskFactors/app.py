@@ -200,7 +200,7 @@ else:  # Chatbot Prédiction
         ])
 
         model_files = {
-            "Lung (CT scan poumon)": "best_model.hdf5",  # Ton fichier Xception weights
+            "Lung (CT scan poumon)": "best_model.hdf5",
             "Breast (Mammographie ou ultrasound sein)": "breast_cancer_model.h5",
             "Skin (Photo dermatologique – cancer de la peau)": "skin_cancer_model.h5"
         }
