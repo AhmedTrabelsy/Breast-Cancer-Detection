@@ -392,7 +392,7 @@ def generate_image_pdf(cancer_type_selected, result, confidence, risk, pred_prob
     ))
     story.append(Spacer(1, 1*cm))
     story.append(Paragraph(
-        "Projet Universitaire 2025 – Équipe Ahmed Trabelsi et al.", styles['Italic']))
+        "Projet Universitaire 2025", styles['Italic']))
 
     doc.build(story)
     buffer.seek(0)
@@ -408,7 +408,7 @@ except:
     st.sidebar.image(
         "https://png.pngtree.com/png-clipart/20250524/original/pngtree-3d-pink-ribbon-png-clipart-breast-cancer-awareness-png-image_21063411.png", width=80)
 
-st.sidebar.title("Navigation")
+st.sidebar.title("OncoRisk AI")
 page = st.sidebar.radio("Pages", [
     "Accueil & Introduction",
     "À Propos du Projet",
