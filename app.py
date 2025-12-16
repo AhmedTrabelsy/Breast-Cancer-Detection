@@ -612,55 +612,44 @@ elif page == "Analyse d'Images Médicales":
     model_files = {
         "Colon (Histopathologie)": "colon_cancer_model.keras",
         "Poumon (CT scan)": "best_model.hdf5",
-        "Sein (Mammographie ou échographie)": "breast_best_head.h5",
+        "Sein (Mammographie ou échographie)": "breast_cancer_efficientnetv2.keras",
         "Peau (Photo dermatologique)": "skin_cancer_model.h5"
     }
 
     classes_dict = {
         "Colon (Histopathologie)": ["Cancer (Adénocarcinome)", "Normal"],
         "Poumon (CT scan)": ["Normal (Pas de cancer)", "Adénocarcinome", "Carcinome à grandes cellules", "Carcinome épidermoïde"],
-        "Sein (Mammographie ou échographie)": ["Bénin", "Malin"],
+        "Sein (Mammographie ou échographie)": ["Non-Cancer", "Cancer"],
         "Peau (Photo dermatologique)": ["Bénin", "Malin"]
-    }
-
-    input_sizes = {
-        "Colon (Histopathologie)": (300, 300),
-        "Poumon (CT scan)": (299, 299),
-        "Sein (Mammographie ou échographie)": (224, 224),
-        "Peau (Photo dermatologique)": (224, 224)
     }
 
     preprocess_modes = {
         "Colon (Histopathologie)": "efficientnet_v2",
         "Poumon (CT scan)": "xception",
-        "Sein (Mammographie ou échographie)": "efficientnet",
+        "Sein (Mammographie ou échographie)": "efficientnet_v2",
         "Peau (Photo dermatologique)": "efficientnet"
     }
 
     @st.cache_resource
     def load_image_model(cancer_type):
         model_path = model_files[cancer_type]
-        input_shape = (*input_sizes[cancer_type], 3)
 
         if "Colon" in cancer_type:
             try:
-                # On charge le modèle complet directement (pas besoin de reconstruire l'architecture)
                 model = load_model(model_path)
                 st.success(f"Modèle {cancer_type} chargé avec succès.")
                 return model, preprocess_modes[cancer_type]
             except Exception as e:
                 st.error(f"Erreur chargement modèle Colon: {e}")
                 return None, None
-            
-        if "Poumon" in cancer_type:
-            base = Xception(weights='imagenet',
-                            include_top=False, input_shape=input_shape)
+
+        elif "Poumon" in cancer_type:
+            base = Xception(weights='imagenet', include_top=False)
             x = base.output
             x = GlobalAveragePooling2D()(x)
             x = Dense(128, activation='relu')(x)
             x = Dropout(0.5)(x)
-            outputs = Dense(
-                len(classes_dict[cancer_type]), activation='softmax')(x)
+            outputs = Dense(len(classes_dict[cancer_type]), activation='softmax')(x)
             model = Model(inputs=base.input, outputs=outputs)
             for layer in base.layers:
                 layer.trainable = False
@@ -668,27 +657,45 @@ elif page == "Analyse d'Images Médicales":
                 model.load_weights(model_path)
                 st.success("Modèle pour poumon chargé avec succès.")
             except Exception as e:
-                print(f"Impossible de charger les poids : {e}. Utilisation du modèle de base.")
-            return model, preprocess_modes[cancer_type]
-        else:
-            base = EfficientNetB0(weights='imagenet',
-                                  include_top=False, input_shape=input_shape)
-            x = base.output
-            x = GlobalAveragePooling2D()(x)
-            outputs = Dense(
-                len(classes_dict[cancer_type]), activation='softmax')(x)
-            model = Model(inputs=base.input, outputs=outputs)
-            try:
-                model.load_weights(model_path, by_name=True,
-                                   skip_mismatch=True)
-                st.success(f"Modèle chargé avec succès.")
-            except Exception as e:
-                print(f"Impossible de charger les poids : {e}. Utilisation du modèle de base.")
+                st.warning(f"Impossible de charger les poids poumon : {e}. Utilisation du modèle de base.")
             return model, preprocess_modes[cancer_type]
 
+        elif "Sein" in cancer_type:
+            try:
+                model = load_model(model_path)
+                st.success(f"Modèle Sein (EfficientNetV2B3) chargé avec succès.")
+                return model, "efficientnet_v2"
+            except Exception as e:
+                st.error(f"Erreur lors du chargement du modèle Sein : {e}")
+                return None, None
+
+        elif "Peau" in cancer_type:
+            base = EfficientNetB0(weights='imagenet', include_top=False)
+            x = base.output
+            x = GlobalAveragePooling2D()(x)
+            outputs = Dense(len(classes_dict[cancer_type]), activation='softmax')(x)
+            model = Model(inputs=base.input, outputs=outputs)
+            try:
+                model.load_weights(model_path, by_name=True, skip_mismatch=True)
+                st.success(f"Modèle Peau chargé avec succès.")
+            except Exception as e:
+                st.warning(f"Poids Peau non chargés : {e}. Modèle de base utilisé.")
+            return model, preprocess_modes[cancer_type]
+
+        else:
+            return None, None
+
     image_model, preprocess_mode = load_image_model(cancer_type_selected)
+    
+    if image_model is None:
+        st.error("Impossible de charger le modèle sélectionné. Vérifiez le fichier.")
+        st.stop()
+
+    # Taille d'entrée déduite automatiquement du modèle chargé
+    model_input_shape = image_model.input_shape[1:3]  # (height, width)
+    target_size = model_input_shape
+
     classes = classes_dict[cancer_type_selected]
-    target_size = input_sizes[cancer_type_selected]
 
     uploaded_file = st.file_uploader(
         "Uploader une image (JPG/PNG)", type=["jpg", "jpeg", "png"])
@@ -703,20 +710,19 @@ elif page == "Analyse d'Images Médicales":
             crop = int(min(w, h) * 0.9)
             left = (w - crop) // 2
             top = (h - crop) // 2
-            processed_img = img_original.crop(
-                (left, top, left + crop, top + crop))
-            st.image(processed_img, caption="Crop centré sur lésion",
-                     use_column_width=True)
+            processed_img = img_original.crop((left, top, left + crop, top + crop))
+            st.image(processed_img, caption="Crop centré sur lésion", use_column_width=True)
 
         img_resized = processed_img.resize(target_size)
         img_array = keras_image.img_to_array(img_resized)
         img_array = np.expand_dims(img_array, axis=0)
 
+        # Préprocessing selon le modèle
         if preprocess_mode == "xception":
             img_array = xception_preprocess(img_array)
         elif preprocess_mode == "efficientnet":
             img_array = efficientnet_preprocess(img_array)
-        elif preprocess_mode == "efficientnet_v2": 
+        elif preprocess_mode == "efficientnet_v2":
             img_array = efficientnet_v2_preprocess(img_array)
         else:
             img_array /= 255.0
@@ -724,17 +730,22 @@ elif page == "Analyse d'Images Médicales":
         if st.button("🔍 Analyser l'image", type="primary"):
             with st.spinner("Prédiction en cours..."):
                 raw_pred = image_model.predict(img_array)[0]
-                pred = raw_pred
-                if "Colon" in cancer_type_selected:
-                    # Selon predict_colon.py: sortie = proba classe 1 (Normal)
-                    # Si shape est (1,), raw_pred[0] est la probabilité.
-                    prob_normal = float(raw_pred[0]) if hasattr(raw_pred, '__len__') and len(raw_pred) == 1 else float(raw_pred)
-                    prob_cancer = 1.0 - prob_normal
+
+                # Gestion des modèles binaires (sigmoid) vs multiclasses (softmax)
+                if "Sein" in cancer_type_selected or "Colon" in cancer_type_selected:
+                    prob_raw = float(raw_pred[0]) if raw_pred.shape == (1,) else float(raw_pred)
                     
-                    # On reconstruit un tableau [Proba Cancer, Proba Normal] pour l'affichage
-                    pred = np.array([prob_cancer, prob_normal]) 
+                    if "Sein" in cancer_type_selected:
+                        # CORRECTION DE L'INVERSION OBSERVÉE SUR LE MODÈLE SEIN
+                        prob_cancer = 1.0 - prob_raw
+                    else:
+                        prob_cancer = prob_raw  # Normal pour Colon
+                    
+                    prob_non_cancer = 1.0 - prob_cancer
+                    pred = np.array([prob_non_cancer, prob_cancer])
                 else:
                     pred = raw_pred
+
                 confidence = np.max(pred) * 100
                 idx = np.argmax(pred)
                 result = classes[idx]
@@ -747,17 +758,23 @@ elif page == "Analyse d'Images Médicales":
                     st.progress(float(p))
                     st.caption(f"{classes[i]} : {p*100:.2f}%")
 
-                risk = "Faible" if any(b in result for b in [
-                                       "Normal", "Bénin"]) else "Élevé" if confidence >= 80 else "Moyen" if confidence >= 50 else "Incertain"
+                # Niveau de risque estimé
+                if any(b in result for b in ["Normal", "Non-Cancer", "Bénin"]):
+                    risk = "Faible"
+                elif confidence >= 80:
+                    risk = "Élevé"
+                elif confidence >= 50:
+                    risk = "Moyen"
+                else:
+                    risk = "Incertain"
                 st.markdown(f"### Niveau de risque estimé : **{risk}**")
 
                 st.subheader("Recommandations")
                 st.markdown("- 🛑 **Consultez immédiatement un spécialiste.**")
                 st.markdown("- ⚠️ Outil éducatif – pas un diagnostic.")
-                if "Malin" in result or "Adéno" in result or "Carcinome" in result:
+                if "Cancer" in result or "Malin" in result or "Adéno" in result or "Carcinome" in result:
                     st.markdown("- ❗ Signes potentiels de malignité détectés.")
-                st.markdown(
-                    "**Prévention générale :** arrêt tabac • alimentation équilibrée • activité physique • protection solaire")
+                st.markdown("**Prévention générale :** arrêt tabac • alimentation équilibrée • activité physique • protection solaire")
 
                 pdf_data = generate_image_pdf(
                     cancer_type_selected, result, confidence, risk, pred, classes)
@@ -768,22 +785,3 @@ elif page == "Analyse d'Images Médicales":
                     file_name=f"analyse_image_{cancer_type_selected.replace(' ', '_').replace('(', '').replace(')', '')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                     mime="application/pdf"
                 )
-
-elif page == "Références & Sources":
-    st.title("Références Scientifiques")
-    st.markdown("""
-    - American Cancer Society – Guidelines for Cancer Prevention
-    - World Health Organization – Cancer Prevention Factsheets
-    - Harvard T.H. Chan School of Public Health – Cancer Risk Index
-    - Datasets : IQ-OTH/NCCD (Lung), CBIS-DDSM (Breast), ISIC (Skin)
-    - Modèles : Scikit-learn, TensorFlow/Keras
-    """)
-
-# ============================================================
-# FOOTER
-# ============================================================
-st.markdown("---")
-st.markdown("""
-**Projet Universitaire 2025** | Développé avec ❤️ utilisant Streamlit, scikit-learn et TensorFlow  
-Ce travail est purement académique et vise à promouvoir la recherche en IA appliquée à la santé.
-""")
